@@ -29,27 +29,50 @@ jobs:
       - name: Install dependencies (retry)
         run: |
           set -e
+          ok=0
           for i in 1 2 3; do
             echo "Attempt $i: installing deps"
-            python -m pip install --upgrade pip && pip install -r requirements.txt && break
+            if python -m pip install --upgrade pip && pip install -r requirements.txt; then
+              ok=1
+              break
+            fi
             echo "Install failed. Retrying..."
             sleep 5
           done
+          if [ "$ok" -ne 1 ]; then
+            echo "Install failed after 3 attempts"
+            exit 1
+          fi
+
 
 
       - name: Run ingest and export (retry)
         run: |
           set -e
+          ok=0
           for i in 1 2 3; do
             echo "Attempt $i: running pipeline"
-            python ingest_and_export.py && break
+            if python ingest_and_export.py; then
+              ok=1
+              break
+            fi
             echo "Run failed. Retrying..."
             sleep 10
           done
+          if [ "$ok" -ne 1 ]; then
+            echo "Pipeline failed after 3 attempts"
+            exit 1
+          fi
+
 
       - name: Zip Excel artifact
         run: |
+          if [ ! -f monarch_transactions.xlsx ]; then
+            echo "monarch_transactions.xlsx not found — export likely failed"
+            exit 1
+          fi
           zip -j monarch_transactions.zip monarch_transactions.xlsx
+
 
 
 
