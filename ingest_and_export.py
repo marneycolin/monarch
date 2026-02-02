@@ -28,6 +28,7 @@ def _parse_date(s):
     return datetime.strptime(s, "%Y-%m-%d").date()
 
 async def fetch_transactions(days_back: int):
+    os.makedirs(".mm", exist_ok=True)
     email = os.getenv("MONARCH_EMAIL")
     password = os.getenv("MONARCH_PASSWORD")
     mfa_secret = os.getenv("MONARCH_MFA_SECRET")
@@ -70,22 +71,23 @@ async def fetch_transactions(days_back: int):
     mm = MonarchMoney()
     await mm.login(email, password, mfa_secret_key=mfa_secret)
 
-    async def fetch_page(off: int):
-        return await mm.get_transactions(
+    async def fetch_page(client: MonarchMoney, off: int):
+        return await client.get_transactions(
             limit=limit,
             offset=off,
             start_date=start_date,
             end_date=end_date,
         )
 
+
     # First page with 401 recovery (this is the baked-in logic)
     try:
-        data = await fetch_page(offset)
+        data = await fetch_page(mm, offset)
     except Exception as e:
         if is_unauthorized(e):
             print("Saved session unauthorized; nuking session + logging in fresh...")
             mm = await fresh_client()
-            data = await fetch_page(offset)
+            data = await fetch_page(mm, offset)
         else:
             raise
 
@@ -99,16 +101,29 @@ async def fetch_transactions(days_back: int):
 
     # Remaining pages
     while len(all_results) < total_count:
-        data = await fetch_page(offset)
+        try:
+            data = await fetch_page(mm, offset)
+        except Exception as e:
+            if is_unauthorized(e):
+                print("Session unauthorized mid-pagination; re-logging in fresh...")
+                mm = await fresh_client()
+                data = await fetch_page(mm, offset)
+            else:
+                raise
+
         results = data["allTransactions"]["results"]
         all_results.extend(results)
 
-        print(f"Pulled page offset={offset} got={len(results)} total_so_far={len(all_results)} total={total_count}")
+        print(
+            f"Pulled page offset={offset} got={len(results)} "
+            f"total_so_far={len(all_results)} total={total_count}"
+        )
 
         if len(results) == 0:  # safety guard
             break
 
         offset += limit
+
 
     return all_results, start_date, end_date
 
@@ -142,6 +157,7 @@ def upsert_transactions(db_url: str, txs: list[dict]) -> int:
       is_pending     = EXCLUDED.is_pending,
       created_at     = EXCLUDED.created_at,
       updated_at     = EXCLUDED.updated_at,
+      is_transfer    = EXCLUDED.is_transfer
       raw_json       = EXCLUDED.raw_json
     ;
     """
@@ -160,7 +176,7 @@ def upsert_transactions(db_url: str, txs: list[dict]) -> int:
             "account_owner": None,           # we can enrich later from an accounts endpoint
             "notes": t.get("notes"),
             "is_pending": t.get("pending"),
-            "is_transfer": None,             # not present here; we can derive later if needed
+            "is_transfer": t.get("isTransfer") or t.get("is_transfer"),
             "created_at": t.get("createdAt"),
             "updated_at": t.get("updatedAt"),
             "raw_json": json.dumps(t),
@@ -185,20 +201,24 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
 
     # Raw transactions, aligned to the same window you pulled
     tx_query = """
-    SELECT
-      txn_date,
-      amount,
-      merchant_name,
-      category_name,
-      account_name,
-      notes,
-      is_pending,
-      updated_at
-    FROM raw.monarch_transactions
-    WHERE txn_date >= CAST(:start_date AS date)
-      AND txn_date <= CAST(:end_date AS date)
-      AND merchant_name IS DISTINCT FROM 'Test Merchant'
-    ORDER BY txn_date DESC, updated_at DESC NULLS LAST;
+   SELECT
+     t.txn_date,
+     t.amount,
+     t.merchant_name,
+     t.category_name,
+     t.account_name,
+     m.owner,
+     m.account_class,
+     m.account_subtype,
+     t.notes,
+     t.is_pending,
+     t.updated_at
+    FROM raw.monarch_transactions t
+    LEFT JOIN mart.account_owner_map m USING (account_id)
+    WHERE t.txn_date >= CAST(:start_date AS date)
+      AND t.txn_date <= CAST(:end_date AS date)
+      AND t.merchant_name IS DISTINCT FROM 'Test Merchant'
+    ORDER BY t.txn_date DESC, t.updated_at DESC NULLS LAST;
     """
 
     df = pd.read_sql(text(tx_query), engine, params={"start_date": start_date, "end_date": end_date})
@@ -250,7 +270,7 @@ async def main():
     if not db_url:
         raise ValueError("DATABASE_URL missing")
 
-    days_back = int(os.getenv("DAYS_BACK", "30"))
+    days_back = int(os.getenv("DAYS_BACK", "90"))
     out_xlsx = os.getenv("OUT_XLSX", "monarch_transactions.xlsx")
 
     txs, start_date, end_date = await fetch_transactions(days_back=days_back)
