@@ -47,12 +47,18 @@ jobs:
             sleep 10
           done
 
+      - name: Zip Excel artifact
+        run: |
+          zip -j monarch_transactions.zip monarch_transactions.xlsx
 
-      - name: Upload Excel artifact
+
+
+      - name: Upload zipped Excel artifact
         uses: actions/upload-artifact@v4
         with:
           name: monarch_transactions_xlsx
-          path: monarch_transactions.xlsx
+          path: monarch_transactions.zip
+
 
 
 
