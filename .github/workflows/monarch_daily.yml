@@ -26,18 +26,33 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
+      - name: Install dependencies (retry)
         run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          set -e
+          for i in 1 2 3; do
+            echo "Attempt $i: installing deps"
+            python -m pip install --upgrade pip && pip install -r requirements.txt && break
+            echo "Install failed. Retrying..."
+            sleep 5
+          done
 
-      - name: Run ingest and export
+
+      - name: Run ingest and export (retry)
         run: |
-          python ingest_and_export.py
+          set -e
+          for i in 1 2 3; do
+            echo "Attempt $i: running pipeline"
+            python ingest_and_export.py && break
+            echo "Run failed. Retrying..."
+            sleep 10
+          done
+
 
       - name: Upload Excel artifact
         uses: actions/upload-artifact@v4
         with:
           name: monarch_transactions_xlsx
           path: monarch_transactions.xlsx
+
+
 
