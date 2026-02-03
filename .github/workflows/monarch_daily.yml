@@ -32,7 +32,8 @@ jobs:
           ok=0
           for i in 1 2 3; do
             echo "Attempt $i: installing deps"
-            if python -m pip install --upgrade pip && pip install -r requirements.txt; then
+            if python -m pip install --upgrade pip \
+              && python -m pip install -r requirements.txt; then
               ok=1
               break
             fi
@@ -43,8 +44,6 @@ jobs:
             echo "Install failed after 3 attempts"
             exit 1
           fi
-
-
 
       - name: Run ingest and export (retry)
         run: |
