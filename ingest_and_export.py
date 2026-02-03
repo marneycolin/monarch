@@ -270,7 +270,8 @@ async def main():
     if not db_url:
         raise ValueError("DATABASE_URL missing")
 
-    days_back = int(os.getenv("DAYS_BACK", "90"))
+    days_back_str = (os.getenv("DAYS_BACK") or "").strip() 
+    days_back = int(days_back_str) if days_back_str else 90 
     out_xlsx = os.getenv("OUT_XLSX", "monarch_transactions.xlsx")
 
     txs, start_date, end_date = await fetch_transactions(days_back=days_back)
