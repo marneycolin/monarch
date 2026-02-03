@@ -44,6 +44,10 @@ jobs:
             echo "Install failed after 3 attempts"
             exit 1
           fi
+      - name: Show installed packages
+        run: |
+          python -m pip --version
+          python -m pip show monarchmoney psycopg2-binary pandas sqlalchemy openpyxl python-dotenv || true
 
       - name: Run ingest and export (retry)
         run: |
