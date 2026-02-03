@@ -15,7 +15,7 @@ jobs:
       MONARCH_PASSWORD: ${{ secrets.MONARCH_PASSWORD }}
       MONARCH_MFA_SECRET: ${{ secrets.MONARCH_MFA_SECRET }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      DAYS_BACK: ${{ vars.DAYS_BACK }}
+      DAYS_BACK: ${{ vars.DAYS_BACK || '90' }}
 
     steps:
       - name: Checkout
@@ -44,29 +44,39 @@ jobs:
             echo "Install failed after 3 attempts"
             exit 1
           fi
+
       - name: Show installed packages
         run: |
           python -m pip --version
-          python -m pip show monarchmoney psycopg2-binary pandas sqlalchemy openpyxl python-dotenv || true
+          python -m pip show monarchmoney psycopg2-binary pandas SQLAlchemy openpyxl python-dotenv || true
 
       - name: Run ingest and export (retry)
         run: |
           set -e
           ok=0
+
+          # Give the runner/network a moment to settle (DNS/TLS/etc.)
+          echo "Initial sleep to avoid cold-start TLS issues..."
+          sleep 30
+
           for i in 1 2 3; do
             echo "Attempt $i: running pipeline"
+
             if python ingest_and_export.py; then
               ok=1
               break
             fi
-            echo "Run failed. Retrying..."
-            sleep 10
+
+            # Exponential-ish backoff: 60s, 120s, 240s
+            wait=$((60 * (2 ** (i-1))))
+            echo "Run failed. Sleeping ${wait}s before retry..."
+            sleep $wait
           done
+
           if [ "$ok" -ne 1 ]; then
             echo "Pipeline failed after 3 attempts"
             exit 1
           fi
-
 
       - name: Zip Excel artifact
         run: |
@@ -76,15 +86,8 @@ jobs:
           fi
           zip -j monarch_transactions.zip monarch_transactions.xlsx
 
-
-
-
       - name: Upload zipped Excel artifact
         uses: actions/upload-artifact@v4
         with:
           name: monarch_transactions_xlsx
           path: monarch_transactions.zip
-
-
-
-
