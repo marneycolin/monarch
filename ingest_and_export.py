@@ -364,6 +364,9 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
     
     colin_df = pd.read_sql(text(colin_query), engine, params={"start_date": start_date, "end_date": end_date})
 
+    df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
+    colin_df['total_spent'] = pd.to_numeric(colin_df['total_spent'], errors='coerce')
+
     # Excel cannot write tz-aware datetimes; strip tz if present
     for col in df.columns:
         if pd.api.types.is_datetime64_any_dtype(df[col]):
