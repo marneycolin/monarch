@@ -3,24 +3,24 @@ name: Monarch Daily Ingest + Export
 on:
   workflow_dispatch:
   schedule:
-    - cron: "15 12 * * *"  # daily ~6:15am America/Chicago
+    - cron: "15 12 * * *"  # Daily at 6:15am Central
 
 jobs:
   run:
-    runs-on: ubuntu-latest  # ← Changed from self-hosted
-    timeout-minutes: 20
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
 
     env:
       MONARCH_EMAIL: ${{ secrets.MONARCH_EMAIL }}
       MONARCH_PASSWORD: ${{ secrets.MONARCH_PASSWORD }}
       MONARCH_MFA_SECRET: ${{ secrets.MONARCH_MFA_SECRET }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}  # ← Add this if using Google Sheets
-      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}  # ← Add this too
-      DAYS_BACK: ${{ vars.DAYS_BACK || '90' }}
+      GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+      DAYS_BACK: 90
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Set up Python
@@ -33,12 +33,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements.txt
 
-      - name: Run ingest and export
+      - name: Run pipeline
         run: python ingest_and_export.py
 
       - name: Upload Excel artifact
         uses: actions/upload-artifact@v4
-        if: always()  # Upload even if previous steps fail
+        if: always()
         with:
           name: monarch_transactions_xlsx
           path: monarch_transactions.xlsx

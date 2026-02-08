@@ -1,15 +1,29 @@
 # google_sheets.py
-import pandas as pd
 import os
 import re
+import json
+import pandas as pd
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
+from google.oauth2 import service_account
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 
 SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 
 def _get_creds():
+    """Get credentials - supports both OAuth (local) and service account (GitHub Actions)"""
+    
+    # Check for service account JSON (for automation)
+    service_account_json = os.getenv("GOOGLE_SERVICE_ACCOUNT_JSON")
+    if service_account_json:
+        service_account_info = json.loads(service_account_json)
+        creds = service_account.Credentials.from_service_account_info(
+            service_account_info, scopes=SCOPES
+        )
+        return creds
+    
+    # Fall back to OAuth (for local development)
     creds = None
     token_path = "token.json"
     client_secret_path = "client_secret.json"
@@ -89,7 +103,7 @@ def write_df(spreadsheet_id: str, tab_title: str, df):
     svc.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id,
         range=f"{tab_title}!A1",
-        valueInputOption="USER_ENTERED",  # Changed from "RAW" - this interprets numbers as numbers
+        valueInputOption="USER_ENTERED",  # Interprets numbers as numbers
         body={"values": values},
     ).execute()
 
