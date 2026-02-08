@@ -15,7 +15,7 @@ async def test_transaction_details():
     await mm.login(email, password, mfa_secret_key=mfa_secret)
     
     # Replace with a real transaction_id from your split transaction query above
-    transaction_id = "YOUR_SPLIT_TRANSACTION_ID_HERE"
+    transaction_id = "235102462876472879"
     
     # Check if this method exists and what it returns
     try:
