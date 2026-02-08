@@ -11,28 +11,35 @@ async def test_transaction_details():
     password = os.getenv("MONARCH_PASSWORD")
     mfa_secret = os.getenv("MONARCH_MFA_SECRET")
     
-    mm = MonarchMoney()
-    await mm.login(email, password, mfa_secret_key=mfa_secret)
-    
-    # Replace with a real transaction_id from your split transaction query above
-    transaction_id = "235102462876472879"
-    
-    # Check if this method exists and what it returns
+    # Delete stale session
     try:
-        details = await mm.get_transaction_details(transaction_id)
-        print("Transaction details:")
-        print(json.dumps(details, indent=2))
-        
-        # Check for splits
-        if "splits" in details:
-            print("\n✅ FOUND SPLITS!")
-            print(f"Number of splits: {len(details['splits'])}")
-        else:
-            print("\n❌ No 'splits' field found")
-            
-    except AttributeError:
-        print("❌ get_transaction_details() method doesn't exist")
-        print("Available methods:", [m for m in dir(mm) if not m.startswith('_')])
+        os.remove(".mm/mm_session.pickle")
+    except FileNotFoundError:
+        pass
+    
+    mm = MonarchMoney()
+    await mm.login(
+        email, 
+        password, 
+        use_saved_session=False,
+        save_session=True,
+        mfa_secret_key=mfa_secret
+    )
+    
+    transaction_id = "Y235102462876472879"
+    
+    # Get the FULL raw response
+    details = await mm.get_transaction_details(transaction_id)
+    
+    print("="*80)
+    print("FULL RAW JSON:")
+    print("="*80)
+    print(json.dumps(details, indent=2))
+    print("="*80)
+    
+    # Print all top-level keys
+    print("\nTop-level keys:")
+    print(list(details.keys()))
 
 if __name__ == "__main__":
     asyncio.run(test_transaction_details())
