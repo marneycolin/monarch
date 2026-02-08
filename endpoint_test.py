@@ -23,4 +23,37 @@ async def test_transaction_splits():
         password, 
         use_saved_session=False,
         save_session=True,
-        mfa_secret_key=mfa_se
+        mfa_secret_key=mfa_secret
+    )
+    
+    # Replace with your split transaction ID
+    transaction_id = "235102462876472879"  # The Costco one from earlier
+    
+    # Get the split details
+    print("="*80)
+    print("TESTING get_transaction_splits():")
+    print("="*80)
+    
+    splits_data = await mm.get_transaction_splits(transaction_id)
+    
+    print(json.dumps(splits_data, indent=2))
+    print("="*80)
+    
+    # Check if we have splits
+    transaction = splits_data.get("getTransaction", {})
+    splits = transaction.get("splitTransactions", [])
+    
+    if splits:
+        print(f"\n✅ FOUND {len(splits)} SPLITS!")
+        for i, split in enumerate(splits, 1):
+            print(f"\nSplit {i}:")
+            print(f"  ID: {split.get('id')}")
+            print(f"  Amount: ${split.get('amount')}")
+            print(f"  Category: {split.get('category', {}).get('name')}")
+            print(f"  Merchant: {split.get('merchant', {}).get('name')}")
+            print(f"  Notes: {split.get('notes')}")
+    else:
+        print("\n❌ No splits found")
+
+if __name__ == "__main__":
+    asyncio.run(test_transaction_splits())
