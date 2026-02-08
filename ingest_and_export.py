@@ -7,8 +7,13 @@ import psycopg2
 import pandas as pd
 from dotenv import load_dotenv
 from monarchmoney import MonarchMoney
+from google_sheets import write_df, clear_tab, get_sheet_link, ensure_tab
 
-load_dotenv(dotenv_path=".env", override=False)
+load_dotenv(dotenv_path=".env", override=True)
+
+print("CWD:", os.getcwd())
+print(".env exists:", os.path.exists(".env"))
+print("GOOGLE_SHEET_ID:", repr(os.getenv("GOOGLE_SHEET_ID")))
 
 def _safe_get(d, path, default=None):
     """
@@ -133,18 +138,31 @@ def upsert_transactions(db_url: str, txs: list[dict]) -> int:
 
     sql = """
     INSERT INTO raw.monarch_transactions (
-      transaction_id, txn_date, amount,
-      merchant_name, category_name, category_group,
-      account_id, account_name, account_owner,
-      notes, is_pending, is_transfer,
-      created_at, updated_at, raw_json
+      transaction_id, 
+      txn_date, 
+      amount,
+      merchant_name, merchant_id, 
+      category_name,
+      account_id, account_name,
+      notes, 
+      is_pending, 
+      is_transfer,
+      created_at, 
+      updated_at, 
+      raw_json
     )
     VALUES (
-      %(transaction_id)s, %(txn_date)s, %(amount)s,
-      %(merchant_name)s, %(category_name)s, %(category_group)s,
-      %(account_id)s, %(account_name)s, %(account_owner)s,
-      %(notes)s, %(is_pending)s, %(is_transfer)s,
-      %(created_at)s, %(updated_at)s, %(raw_json)s::jsonb
+      %(transaction_id)s, 
+      %(txn_date)s, 
+      %(amount)s,
+      %(merchant_name)s, %(category_name)s,
+      %(account_id)s, %(account_name)s,
+      %(notes)s, 
+      %(is_pending)s, 
+      %(is_transfer)s,
+      %(created_at)s,
+      %(updated_at)s, 
+      %(raw_json)s::jsonb
     )
     ON CONFLICT (transaction_id) DO UPDATE SET
       txn_date       = EXCLUDED.txn_date,
@@ -157,7 +175,7 @@ def upsert_transactions(db_url: str, txs: list[dict]) -> int:
       is_pending     = EXCLUDED.is_pending,
       created_at     = EXCLUDED.created_at,
       updated_at     = EXCLUDED.updated_at,
-      is_transfer    = EXCLUDED.is_transfer
+      is_transfer    = EXCLUDED.is_transfer,
       raw_json       = EXCLUDED.raw_json
     ;
     """
@@ -263,15 +281,16 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
             summary_df.to_excel(writer, sheet_name="monthly_summary", index=False)
 
     engine.dispose()
-    return len(df)
+    return df,rollup_df,summary_df
 
 async def main():
     db_url = os.getenv("DATABASE_URL")
     if not db_url:
         raise ValueError("DATABASE_URL missing")
 
-    days_back_str = (os.getenv("DAYS_BACK") or "").strip() 
-    days_back = int(days_back_str) if days_back_str else 90 
+    days_back_str = (os.getenv("DAYS_BACK") or "").strip()
+    days_back = int(days_back_str) if days_back_str else 90
+
     out_xlsx = os.getenv("OUT_XLSX", "monarch_transactions.xlsx")
 
     txs, start_date, end_date = await fetch_transactions(days_back=days_back)
@@ -280,8 +299,35 @@ async def main():
     upserted = upsert_transactions(db_url, txs)
     print(f"Upserted {upserted} rows into raw.monarch_transactions")
 
-    exported = export_to_excel(db_url, out_xlsx, start_date=start_date, end_date=end_date)
-    print(f"Exported {exported} rows to {out_xlsx}")
+    tx_df, rollup_df, summary_df = export_to_excel(
+        db_url,
+        out_xlsx,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    print(f"Exported {len(tx_df)} rows to {out_xlsx}")
+
+    # Publish to Google Sheets (stable destination)
+    sheet_id = (os.getenv("GOOGLE_SHEET_ID") or "").strip()
+    if sheet_id:
+        print("Publishing to Google Sheets...")
+
+        ensure_tab(sheet_id, "transactions")
+        clear_tab(sheet_id, "transactions")
+        write_df(sheet_id, "transactions", tx_df)
+
+        ensure_tab(sheet_id, "rollup_monthly")
+        clear_tab(sheet_id, "rollup_monthly")
+        write_df(sheet_id, "rollup_monthly", rollup_df)
+
+        if summary_df is not None:
+            ensure_tab(sheet_id, "monthly_summary")
+            clear_tab(sheet_id, "monthly_summary")
+            write_df(sheet_id, "monthly_summary", summary_df)
+
+        print("Google Sheet link:", get_sheet_link(sheet_id))
+    else:
+        print("GOOGLE_SHEET_ID not set; skipping Google Sheets publish.")
 
 if __name__ == "__main__":
     asyncio.run(main())
