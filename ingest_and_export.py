@@ -401,7 +401,7 @@ async def main():
     print(f"Upserted {upserted} rows into raw.transactions")
 
     # Export to Excel
-    tx_df, colin_df, - = export_to_excel(
+    tx_df, colin_df, _ = export_to_excel(
         db_url,
         out_xlsx,
         start_date=start_date,
