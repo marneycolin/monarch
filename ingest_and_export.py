@@ -415,18 +415,20 @@ async def main():
     # Publish to Google Sheets (if configured)
     sheet_id = (os.getenv("GOOGLE_SHEET_ID") or "").strip()
     if sheet_id:
-        print("Publishing to Google Sheets...")
+        try:
+            print("Publishing to Google Sheets...")
 
-        ensure_tab(sheet_id, "transactions")
-        clear_tab(sheet_id, "transactions")
-        write_df(sheet_id, "transactions", tx_df)
+            ensure_tab(sheet_id, "transactions")
+            clear_tab(sheet_id, "transactions")
+            write_df(sheet_id, "transactions", tx_df)
 
-        # Add Colin's monthly spend
-        ensure_tab(sheet_id, "colin_monthly_spend")
-        clear_tab(sheet_id, "colin_monthly_spend")
-        write_df(sheet_id, "colin_monthly_spend", colin_df)  # ← Add this!
+            ensure_tab(sheet_id, "colin_monthly_spend")
+            clear_tab(sheet_id, "colin_monthly_spend")
+            write_df(sheet_id, "colin_monthly_spend", colin_df)
 
-        print("Google Sheet link:", get_sheet_link(sheet_id))
+            print("Google Sheet link:", get_sheet_link(sheet_id))
+        except Exception as e:
+            print(f"Google Sheets export failed (skipping): {e}")
     else:
         print("GOOGLE_SHEET_ID not set; skipping Google Sheets publish.")
 
