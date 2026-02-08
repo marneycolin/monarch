@@ -68,13 +68,27 @@ def write_df(spreadsheet_id: str, tab_title: str, df):
 
     ensure_tab(spreadsheet_id, tab_title)
 
-    df2 = df.copy().where(df.notna(), "")
-    values = [list(df2.columns)] + df2.astype(str).values.tolist()
+    # Convert NaN to empty string but keep types
+    df2 = df.copy()
+    
+    # Build values preserving types
+    values = [list(df2.columns)]  # Header row
+    
+    for _, row in df2.iterrows():
+        row_values = []
+        for val in row:
+            if pd.isna(val):
+                row_values.append("")
+            elif isinstance(val, (int, float)):
+                row_values.append(val)  # Keep as number
+            else:
+                row_values.append(str(val))  # Convert to string
+        values.append(row_values)
 
     svc.spreadsheets().values().update(
         spreadsheetId=spreadsheet_id,
         range=f"{tab_title}!A1",
-        valueInputOption="RAW",
+        valueInputOption="USER_ENTERED",  # Changed from "RAW" - this interprets numbers as numbers
         body={"values": values},
     ).execute()
 
