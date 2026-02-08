@@ -365,8 +365,21 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
     
     colin_df = pd.read_sql(text(colin_query), engine, params={"start_date": start_date, "end_date": end_date})
 
-    df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
-    colin_df['total_spent'] = pd.to_numeric(colin_df['total_spent'], errors='coerce')
+    # Category attributes (for reference/editing)
+    categories_query = """
+        SELECT 
+            category_id,
+            category_name,
+            category_type,
+            rollup_category,
+            include_in_budget,
+            is_discretionary,
+            notes
+        FROM dim.category_attributes
+        ORDER BY category_name;
+    """
+    
+    categories_df = pd.read_sql(text(categories_query), engine)
 
     # Excel cannot write tz-aware datetimes; strip tz if present
     for col in df.columns:
@@ -376,13 +389,18 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
             except Exception:
                 df[col] = pd.to_datetime(df[col]).dt.tz_convert("UTC").dt.tz_localize(None)
 
+    # Convert amount columns to numeric
+    df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
+    colin_df['total_spent'] = pd.to_numeric(colin_df['total_spent'], errors='coerce')
+
     # Write to Excel
     with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="transactions", index=False)
         colin_df.to_excel(writer, sheet_name="colin_monthly_spend", index=False)
+        categories_df.to_excel(writer, sheet_name="category_attributes", index=False)
 
     engine.dispose()
-    return df, colin_df, None  # Return empty for rollup/summary (not using those yet)
+    return df, colin_df, categories_df
 
 
 async def main():
@@ -405,7 +423,7 @@ async def main():
     print(f"Upserted {upserted} rows into raw.transactions")
 
     # Export to Excel
-    tx_df, colin_df, _ = export_to_excel(
+    tx_df, colin_df, categories_df = export_to_excel(
         db_url,
         out_xlsx,
         start_date=start_date,
@@ -427,11 +445,15 @@ async def main():
             clear_tab(sheet_id, "colin_monthly_spend")
             write_df(sheet_id, "colin_monthly_spend", colin_df)
 
+            ensure_tab(sheet_id, "category_attributes")
+            clear_tab(sheet_id, "category_attributes")
+            write_df(sheet_id, "category_attributes", categories_df)
+
             print("Google Sheet link:", get_sheet_link(sheet_id))
         except Exception as e:
-            print(f"Google Sheets export failed (skipping): {e}")
+            print(f"Google Sheets export failed: {e}")
     else:
         print("GOOGLE_SHEET_ID not set; skipping Google Sheets publish.")
-
+        
 if __name__ == "__main__":
     asyncio.run(main())
