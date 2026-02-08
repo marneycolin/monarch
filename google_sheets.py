@@ -1,4 +1,5 @@
 # google_sheets.py
+import pandas as pd
 import os
 import re
 from googleapiclient.discovery import build
