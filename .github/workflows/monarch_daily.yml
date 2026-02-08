@@ -7,7 +7,7 @@ on:
 
 jobs:
   run:
-    runs-on: [self-hosted, linux, monarch]
+    runs-on: ubuntu-latest  # ← Changed from self-hosted
     timeout-minutes: 20
 
     env:
@@ -15,6 +15,8 @@ jobs:
       MONARCH_PASSWORD: ${{ secrets.MONARCH_PASSWORD }}
       MONARCH_MFA_SECRET: ${{ secrets.MONARCH_MFA_SECRET }}
       DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}  # ← Add this if using Google Sheets
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}  # ← Add this too
       DAYS_BACK: ${{ vars.DAYS_BACK || '90' }}
 
     steps:
@@ -26,68 +28,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies (retry)
+      - name: Install dependencies
         run: |
-          set -e
-          ok=0
-          for i in 1 2 3; do
-            echo "Attempt $i: installing deps"
-            if python -m pip install --upgrade pip \
-              && python -m pip install -r requirements.txt; then
-              ok=1
-              break
-            fi
-            echo "Install failed. Retrying..."
-            sleep 5
-          done
-          if [ "$ok" -ne 1 ]; then
-            echo "Install failed after 3 attempts"
-            exit 1
-          fi
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
 
-      - name: Show installed packages
-        run: |
-          python -m pip --version
-          python -m pip show monarchmoney psycopg2-binary pandas SQLAlchemy openpyxl python-dotenv || true
+      - name: Run ingest and export
+        run: python ingest_and_export.py
 
-      - name: Run ingest and export (retry)
-        run: |
-          set -e
-          ok=0
-
-          # Give the runner/network a moment to settle (DNS/TLS/etc.)
-          echo "Initial sleep to avoid cold-start TLS issues..."
-          sleep 30
-
-          for i in 1 2 3; do
-            echo "Attempt $i: running pipeline"
-
-            if python ingest_and_export.py; then
-              ok=1
-              break
-            fi
-
-            # Exponential-ish backoff: 60s, 120s, 240s
-            wait=$((60 * (2 ** (i-1))))
-            echo "Run failed. Sleeping ${wait}s before retry..."
-            sleep $wait
-          done
-
-          if [ "$ok" -ne 1 ]; then
-            echo "Pipeline failed after 3 attempts"
-            exit 1
-          fi
-
-      - name: Zip Excel artifact
-        run: |
-          if [ ! -f monarch_transactions.xlsx ]; then
-            echo "monarch_transactions.xlsx not found — export likely failed"
-            exit 1
-          fi
-          zip -j monarch_transactions.zip monarch_transactions.xlsx
-
-      - name: Upload zipped Excel artifact
+      - name: Upload Excel artifact
         uses: actions/upload-artifact@v4
+        if: always()  # Upload even if previous steps fail
         with:
           name: monarch_transactions_xlsx
-          path: monarch_transactions.zip
+          path: monarch_transactions.xlsx
