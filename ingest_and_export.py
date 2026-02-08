@@ -315,15 +315,6 @@ def upsert_transactions(db_url: str, txs: list[dict]) -> int:
 def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
     """
     Export transactions and summaries to Excel workbook.
-    
-    Args:
-        db_url: PostgreSQL connection string
-        out_path: Output Excel file path
-        start_date: ISO format start date
-        end_date: ISO format end date
-        
-    Returns:
-        Tuple of (transactions_df, rollup_df, summary_df)
     """
     engine = create_engine(db_url)
 
@@ -356,6 +347,23 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
 
     df = pd.read_sql(text(tx_query), engine, params={"start_date": start_date, "end_date": end_date})
 
+    # Colin's monthly spending rollup
+    colin_query = """
+        SELECT 
+            month,
+            month_label,
+            category_name,
+            total_spent,
+            transaction_count,
+            needs_review_count
+        FROM mart.colin_monthly_spend
+        WHERE month >= DATE_TRUNC('month', CAST(:start_date AS date))::date
+          AND month <= DATE_TRUNC('month', CAST(:end_date AS date))::date
+        ORDER BY month DESC, category_name;
+    """
+    
+    colin_df = pd.read_sql(text(colin_query), engine, params={"start_date": start_date, "end_date": end_date})
+
     # Excel cannot write tz-aware datetimes; strip tz if present
     for col in df.columns:
         if pd.api.types.is_datetime64_any_dtype(df[col]):
@@ -364,17 +372,13 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
             except Exception:
                 df[col] = pd.to_datetime(df[col]).dt.tz_convert("UTC").dt.tz_localize(None)
 
-    # For now, create empty dataframes for rollup and summary since those mart tables don't exist yet
-    rollup_df = pd.DataFrame()
-    summary_df = None
-
-    # Write to Excel (just transactions for now)
+    # Write to Excel
     with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="transactions", index=False)
-        # Skip rollup and summary sheets until we rebuild those mart tables
+        colin_df.to_excel(writer, sheet_name="colin_monthly_spend", index=False)
 
     engine.dispose()
-    return df, rollup_df, summary_df
+    return df, colin_df, None  # Return empty for rollup/summary (not using those yet)
 
 
 async def main():
@@ -397,7 +401,7 @@ async def main():
     print(f"Upserted {upserted} rows into raw.transactions")
 
     # Export to Excel
-    tx_df, rollup_df, summary_df = export_to_excel(
+    tx_df, colin_df, - = export_to_excel(
         db_url,
         out_xlsx,
         start_date=start_date,
@@ -414,21 +418,14 @@ async def main():
         clear_tab(sheet_id, "transactions")
         write_df(sheet_id, "transactions", tx_df)
 
-        # Skip rollup and summary sheets until we rebuild those mart tables
-        # if rollup_df is not None and not rollup_df.empty:
-        #     ensure_tab(sheet_id, "rollup_monthly")
-        #     clear_tab(sheet_id, "rollup_monthly")
-        #     write_df(sheet_id, "rollup_monthly", rollup_df)
-
-        # if summary_df is not None:
-        #     ensure_tab(sheet_id, "monthly_summary")
-        #     clear_tab(sheet_id, "monthly_summary")
-        #     write_df(sheet_id, "monthly_summary", summary_df)
+        # Add Colin's monthly spend
+        ensure_tab(sheet_id, "colin_monthly_spend")
+        clear_tab(sheet_id, "colin_monthly_spend")
+        write_df(sheet_id, "colin_monthly_spend", colin_df)  # ← Add this!
 
         print("Google Sheet link:", get_sheet_link(sheet_id))
     else:
         print("GOOGLE_SHEET_ID not set; skipping Google Sheets publish.")
-
 
 if __name__ == "__main__":
     asyncio.run(main())
