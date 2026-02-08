@@ -367,15 +367,8 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
 
     # Category attributes (for reference/editing)
     categories_query = """
-        SELECT 
-            category_id,
-            category_name,
-            category_type,
-            rollup_category,
-            include_in_budget,
-            is_discretionary,
-            notes
-        FROM dim.category_attributes
+        SELECT *
+        FROM dim.colin_categories
         ORDER BY category_name;
     """
     
