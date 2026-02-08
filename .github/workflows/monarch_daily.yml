@@ -27,6 +27,14 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      
+      - name: Verify secrets are loaded
+        run: |
+          echo "MONARCH_EMAIL is set: ${{ secrets.MONARCH_EMAIL != '' }}"
+          echo "MONARCH_PASSWORD is set: ${{ secrets.MONARCH_PASSWORD != '' }}"
+          echo "MONARCH_MFA_SECRET is set: ${{ secrets.MONARCH_MFA_SECRET != '' }}"
+          echo "DATABASE_URL is set: ${{ secrets.DATABASE_URL != '' }}"
+          echo "GOOGLE_SHEET_ID is set: ${{ secrets.GOOGLE_SHEET_ID != '' }}"
 
       - name: Install dependencies
         run: |

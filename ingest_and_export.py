@@ -16,12 +16,13 @@ from monarchmoney import MonarchMoney
 from sqlalchemy import create_engine, text
 from google_sheets import write_df, clear_tab, get_sheet_link, ensure_tab
 
-load_dotenv(dotenv_path=".env", override=True)
-
-print("CWD:", os.getcwd())
-print(".env exists:", os.path.exists(".env"))
-print("GOOGLE_SHEET_ID:", repr(os.getenv("GOOGLE_SHEET_ID")))
-
+# Only load .env if it exists (Local dev)
+if os.path.exists(".env"):
+    load_dotenv(dotenv_path=".env", override=True)
+    print("Loaded .env file")
+else:
+    print("No .env file (using environment variables)")
+        
 
 def _safe_get(d, path, default=None):
     """
