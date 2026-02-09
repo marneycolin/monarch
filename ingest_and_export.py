@@ -427,36 +427,36 @@ async def main():
     print(f"Upserted {upserted} rows into raw.transactions")
 
     # Export to Excel
-tx_df, colin_df, totals_df, categories_df = export_to_excel(
-    db_url,
-    out_xlsx,
-    start_date=start_date,
-    end_date=end_date,
-)
-print(f"Exported {len(tx_df)} rows to {out_xlsx}")
+    tx_df, colin_df, totals_df, categories_df = export_to_excel(
+        db_url,
+        out_xlsx,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    print(f"Exported {len(tx_df)} rows to {out_xlsx}")
 
-# Publish to Google Sheets (if configured)
-sheet_id = (os.getenv("GOOGLE_SHEET_ID") or "").strip()
-if sheet_id:
-    try:
-        print("Publishing to Google Sheets...")
+    # Publish to Google Sheets (if configured)
+    sheet_id = (os.getenv("GOOGLE_SHEET_ID") or "").strip()
+    if sheet_id:
+        try:
+            print("Publishing to Google Sheets...")
 
-        ensure_tab(sheet_id, "transactions")
-        clear_tab(sheet_id, "transactions")
-        write_df(sheet_id, "transactions", tx_df)
+            ensure_tab(sheet_id, "transactions")
+            clear_tab(sheet_id, "transactions")
+            write_df(sheet_id, "transactions", tx_df)
 
-        ensure_tab(sheet_id, "colin_monthly_spend")
-        clear_tab(sheet_id, "colin_monthly_spend")
-        write_df(sheet_id, "colin_monthly_spend", colin_df)
+            ensure_tab(sheet_id, "colin_monthly_spend")
+            clear_tab(sheet_id, "colin_monthly_spend")
+            write_df(sheet_id, "colin_monthly_spend", colin_df)
 
-        ensure_tab(sheet_id, "colin_monthly_totals")
-        clear_tab(sheet_id, "colin_monthly_totals")
-        write_df(sheet_id, "colin_monthly_totals", totals_df)
+            ensure_tab(sheet_id, "colin_monthly_totals")
+            clear_tab(sheet_id, "colin_monthly_totals")
+            write_df(sheet_id, "colin_monthly_totals", totals_df)
 
-        ensure_tab(sheet_id, "category_attributes")
-        clear_tab(sheet_id, "category_attributes")
-        write_df(sheet_id, "category_attributes", categories_df)
+            ensure_tab(sheet_id, "category_attributes")
+            clear_tab(sheet_id, "category_attributes")
+            write_df(sheet_id, "category_attributes", categories_df)
 
-        print("Google Sheet link:", get_sheet_link(sheet_id))
-    except Exception as e:
-        print(f"Google Sheets export failed: {e}")
+            print("Google Sheet link:", get_sheet_link(sheet_id))
+        except Exception as e:
+            print(f"Google Sheets export failed: {e}")
