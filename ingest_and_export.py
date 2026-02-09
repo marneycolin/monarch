@@ -359,6 +359,17 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
     
     colin_df = pd.read_sql(text(colin_query), engine, params={"start_date": start_date, "end_date": end_date})
 
+    # Monthly totals by type
+    totals_query = """
+        SELECT *
+        FROM mart.colin_monthly_by_type
+        WHERE month >= DATE_TRUNC('month', CAST(:start_date AS date))::date
+          AND month <= DATE_TRUNC('month', CAST(:end_date AS date))::date
+        ORDER BY month DESC;
+    """
+    
+    totals_df = pd.read_sql(text(totals_query), engine, params={"start_date": start_date, "end_date": end_date})
+
     # Category attributes (for reference/editing)
     categories_query = """
         SELECT *
@@ -379,68 +390,53 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
     # Convert amount columns to numeric
     df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
     colin_df['total_spent'] = pd.to_numeric(colin_df['total_spent'], errors='coerce')
+    
+    # Convert totals columns to numeric
+    for col in ['total_income', 'total_fixed', 'total_variable', 'total_savings', 'net_cashflow']:
+        if col in totals_df.columns:
+            totals_df[col] = pd.to_numeric(totals_df[col], errors='coerce')
 
     # Write to Excel
     with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="transactions", index=False)
         colin_df.to_excel(writer, sheet_name="colin_monthly_spend", index=False)
+        totals_df.to_excel(writer, sheet_name="colin_monthly_totals", index=False)
         categories_df.to_excel(writer, sheet_name="category_attributes", index=False)
 
     engine.dispose()
-    return df, colin_df, categories_df
+    return df, colin_df, totals_df, categories_df
 
+# Export to Excel
+tx_df, colin_df, totals_df, categories_df = export_to_excel(
+    db_url,
+    out_xlsx,
+    start_date=start_date,
+    end_date=end_date,
+)
+print(f"Exported {len(tx_df)} rows to {out_xlsx}")
 
-async def main():
-    """Main pipeline execution."""
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        raise ValueError("DATABASE_URL missing")
+# Publish to Google Sheets (if configured)
+sheet_id = (os.getenv("GOOGLE_SHEET_ID") or "").strip()
+if sheet_id:
+    try:
+        print("Publishing to Google Sheets...")
 
-    days_back_str = (os.getenv("DAYS_BACK") or "").strip()
-    days_back = int(days_back_str) if days_back_str else 90
+        ensure_tab(sheet_id, "transactions")
+        clear_tab(sheet_id, "transactions")
+        write_df(sheet_id, "transactions", tx_df)
 
-    out_xlsx = os.getenv("OUT_XLSX", "monarch_transactions.xlsx")
+        ensure_tab(sheet_id, "colin_monthly_spend")
+        clear_tab(sheet_id, "colin_monthly_spend")
+        write_df(sheet_id, "colin_monthly_spend", colin_df)
 
-    # Fetch transactions from Monarch API
-    txs, start_date, end_date = await fetch_transactions(days_back=days_back)
-    print(f"Fetched {len(txs)} Monarch txs from {start_date} to {end_date}")
+        ensure_tab(sheet_id, "colin_monthly_totals")
+        clear_tab(sheet_id, "colin_monthly_totals")
+        write_df(sheet_id, "colin_monthly_totals", totals_df)
 
-    # Store in PostgreSQL
-    upserted = upsert_transactions(db_url, txs)
-    print(f"Upserted {upserted} rows into raw.transactions")
+        ensure_tab(sheet_id, "category_attributes")
+        clear_tab(sheet_id, "category_attributes")
+        write_df(sheet_id, "category_attributes", categories_df)
 
-    # Export to Excel
-    tx_df, colin_df, categories_df = export_to_excel(
-        db_url,
-        out_xlsx,
-        start_date=start_date,
-        end_date=end_date,
-    )
-    print(f"Exported {len(tx_df)} rows to {out_xlsx}")
-
-    # Publish to Google Sheets (if configured)
-    sheet_id = (os.getenv("GOOGLE_SHEET_ID") or "").strip()
-    if sheet_id:
-        try:
-            print("Publishing to Google Sheets...")
-
-            ensure_tab(sheet_id, "transactions")
-            clear_tab(sheet_id, "transactions")
-            write_df(sheet_id, "transactions", tx_df)
-
-            ensure_tab(sheet_id, "colin_monthly_spend")
-            clear_tab(sheet_id, "colin_monthly_spend")
-            write_df(sheet_id, "colin_monthly_spend", colin_df)
-
-            ensure_tab(sheet_id, "category_attributes")
-            clear_tab(sheet_id, "category_attributes")
-            write_df(sheet_id, "category_attributes", categories_df)
-
-            print("Google Sheet link:", get_sheet_link(sheet_id))
-        except Exception as e:
-            print(f"Google Sheets export failed: {e}")
-    else:
-        print("GOOGLE_SHEET_ID not set; skipping Google Sheets publish.")
-        
-if __name__ == "__main__":
-    asyncio.run(main())
+        print("Google Sheet link:", get_sheet_link(sheet_id))
+    except Exception as e:
+        print(f"Google Sheets export failed: {e}")
