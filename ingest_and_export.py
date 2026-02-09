@@ -460,3 +460,9 @@ async def main():
             print("Google Sheet link:", get_sheet_link(sheet_id))
         except Exception as e:
             print(f"Google Sheets export failed: {e}")
+    else:
+        print("GOOGLE_SHEET_ID not set; skipping Google Sheets publish.")
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
