@@ -359,6 +359,17 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
     
     colin_df = pd.read_sql(text(colin_query), engine, params={"start_date": start_date, "end_date": end_date})
 
+    # Monthly totals by type
+    totals_query = """
+        SELECT *
+        FROM mart.colin_monthly_by_type
+        WHERE month >= DATE_TRUNC('month', CAST(:start_date AS date))::date
+          AND month <= DATE_TRUNC('month', CAST(:end_date AS date))::date
+        ORDER BY month DESC;
+    """
+    
+    totals_df = pd.read_sql(text(totals_query), engine, params={"start_date": start_date, "end_date": end_date})
+
     # Category attributes (for reference/editing)
     categories_query = """
         SELECT *
@@ -366,7 +377,8 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
         ORDER BY category_name;
     """
     
-    categories_df = pd.read_sql(text(categories_query), engine)m
+    categories_df = pd.read_sql(text(categories_query), engine)
+
     # Excel cannot write tz-aware datetimes; strip tz if present
     for col in df.columns:
         if pd.api.types.is_datetime64_any_dtype(df[col]):
@@ -378,15 +390,21 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
     # Convert amount columns to numeric
     df['amount'] = pd.to_numeric(df['amount'], errors='coerce')
     colin_df['total_spent'] = pd.to_numeric(colin_df['total_spent'], errors='coerce')
+    
+    # Convert totals columns to numeric
+    for col in ['total_income', 'total_fixed', 'total_variable', 'total_savings', 'net_cashflow']:
+        if col in totals_df.columns:
+            totals_df[col] = pd.to_numeric(totals_df[col], errors='coerce')
 
     # Write to Excel
     with pd.ExcelWriter(out_path, engine="openpyxl") as writer:
         df.to_excel(writer, sheet_name="transactions", index=False)
         colin_df.to_excel(writer, sheet_name="colin_monthly_spend", index=False)
+        totals_df.to_excel(writer, sheet_name="colin_monthly_totals", index=False)
         categories_df.to_excel(writer, sheet_name="category_attributes", index=False)
 
     engine.dispose()
-    return df, colin_df, categories_df
+    return df, colin_df, totals_df, categories_df
 
 
 async def main():
