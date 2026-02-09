@@ -349,7 +349,7 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
     df = pd.read_sql(text(tx_query), engine, params={"start_date": start_date, "end_date": end_date})
 
     # Colin's monthly spending rollup
-   colin_query = """
+    colin_query = """
         SELECT *
         FROM mart.colin_monthly_spend
         WHERE month >= DATE_TRUNC('month', CAST(:start_date AS date))::date
