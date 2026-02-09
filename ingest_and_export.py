@@ -362,7 +362,7 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
     # Monthly totals by type
     totals_query = """
         SELECT *
-        FROM mart.colin_monthly_by_type
+        FROM mart.monthly_types
         WHERE month >= DATE_TRUNC('month', CAST(:start_date AS date))::date
           AND month <= DATE_TRUNC('month', CAST(:end_date AS date))::date
         ORDER BY month DESC;
