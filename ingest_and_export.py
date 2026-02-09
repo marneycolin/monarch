@@ -350,12 +350,12 @@ def export_to_excel(db_url: str, out_path: str, start_date: str, end_date: str):
 
     # Colin's monthly spending rollup
    colin_query = """
-    SELECT *
-    FROM mart.colin_monthly_spend
-    WHERE month >= DATE_TRUNC('month', CAST(:start_date AS date))::date
-      AND month <= DATE_TRUNC('month', CAST(:end_date AS date))::date
-    ORDER BY month DESC, category_name;
-"""
+        SELECT *
+        FROM mart.colin_monthly_spend
+        WHERE month >= DATE_TRUNC('month', CAST(:start_date AS date))::date
+          AND month <= DATE_TRUNC('month', CAST(:end_date AS date))::date
+        ORDER BY month DESC, category_name;
+    """
     
     colin_df = pd.read_sql(text(colin_query), engine, params={"start_date": start_date, "end_date": end_date})
 
